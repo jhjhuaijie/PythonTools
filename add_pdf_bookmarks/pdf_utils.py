@@ -2,6 +2,7 @@
 #封装的pdf文档处理工具
 
 from PyPDF2 import PdfReader as reader, PdfWriter as writer
+from PyPDF2.generic import Fit
 import os
 import sys
 import re
@@ -65,25 +66,50 @@ class MyPDFHandler(object):
         往pdf增加单条标签，并保存为一个新的pdf文件
         :param str title: 书签标题
         :param int page: 书签跳转到的页码，表示的是pdf中绝对页码，值为1表示第一页
-        :param parent: 父标签
+        :param IndirectObject parent: 父标签
         :param tuple color: 颜色元组
         :param bool bold: 是否加粗
         :param bool italic: 是否斜体
         :param str fit: 标签缩放方式，默认‘/Fit’
-        :return: None 
+        :return: 返回添加的标签 
         '''
-        self.__writeable_pdf.add_outline_item(title, page, parent = parent, color = color, bold = bold, italic = italic, fit = None) # TODO： "fit = fit"类型转换错误
+        #return self.__writeable_pdf.add_outline_item(title = title, page_number = page, parent = parent, color = color, bold = bold, italic = italic, fit = Fit(fit)) # TODO：ValueError: not enough values to unpack(expected 3, got 0)
+        try:
+            tag = self.__writeable_pdf.add_outline_item(title, page, parent)
+        except Exception as msg:
+            print(msg)
         print ('add_one_bookmark success!, new title is:{0}'.format(title))
+        return tag
 
+    def recursion_add_sub_bookmark(self, title, page, parentNode, parent = None):
+        '''
+        递归添加子标签
+        :param str title:标题
+        :param str page:页码
+        :param dictionary parent:父节点，字典类型
+        :param IndirectObject parent: 父标签
+        '''
+        pdf_tag = self.add_one_bookmark(title, int(page), parent)
+        if not parentNode['sub']:
+            return
+        for bookmark in parentNode['sub'].values():
+            title = bookmark['title']
+            page = bookmark['page']
+            parentNode = bookmark
+            parent = pdf_tag
+            self.recursion_add_sub_bookmark(title, page, parentNode, parent)
 
     def add_bookmarks(self, bookmarks):
         '''
         批量添加书签
-        :param tuple bookmarks: 书签元组列表
+        :param tuple bookmarks: 书签字典列表
         :return: None
         '''
-        for title, page in bookmarks:
-            self.add_one_bookmark(title, page)
+        parent = None
+        for bookmark in bookmarks.values():
+            title = bookmark['title']
+            page = bookmark['page']
+            self.recursion_add_sub_bookmark(title, page, bookmark)
             print ('add_bookmarks success!, add {0} pieces of bookmarks to pdf file'.format(len(bookmarks)))
 
     def read_bookmarks_from_txt(self, txt_file_path, page_offset = 0):
@@ -144,6 +170,7 @@ class MyPDFHandler(object):
                 except Exception as msg:
                     print(msg)
                     continue
+        fin.close()
         return bookmarks
 
     def add_bookmarks_by_read_txt(self, txt_file_path, page_offset=0):
