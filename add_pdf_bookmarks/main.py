@@ -1,8 +1,9 @@
 #coding=utf-8
 
 from pdf_utils import MyPDFHandler, PDFHandleMode as mode
-
 import os
+import sys
+
 def main():
     print('工作目录：{}'.format(os.getcwd()))
     current_dir = os.path.dirname(__file__)  # 当前文件所在的目录
@@ -17,4 +18,6 @@ def main():
 
 
 if __name__ == '__main__':
+    print("python：{}".format(sys.version))
+    print("默认编码格式：{}".format(sys.getdefaultencoding()))
     main()

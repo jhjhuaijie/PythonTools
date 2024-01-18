@@ -3,6 +3,8 @@
 
 from PyPDF2 import PdfReader as reader, PdfWriter as writer
 import os
+import sys
+import re
 
 class PDFHandleMode(object):
     '''
@@ -55,21 +57,22 @@ class MyPDFHandler(object):
 
         with open(new_file_name, 'wb') as fout:
             self.__writeable_pdf.write(fout)
+        fout.close()
         print ('save2file success!, new file is:{0}'.format(new_file_name))
 
-    def add_one_bookmark(self, title, page, parent=None, color=None, fit='/fit'):
+    def add_one_bookmark(self, title, page, parent=None, color=None, bold = False, italic = False, fit='/XYZ'):
         '''
         往pdf增加单条标签，并保存为一个新的pdf文件
         :param str title: 书签标题
         :param int page: 书签跳转到的页码，表示的是pdf中绝对页码，值为1表示第一页
         :param parent: 父标签
         :param tuple color: 颜色元组
-        :param fit: 跳转后标签缩放方式
+        :param bool bold: 是否加粗
+        :param bool italic: 是否斜体
+        :param str fit: 标签缩放方式，默认‘/Fit’
         :return: None 
         '''
-
-        # 防止乱码，title转换成utf-8
-        self.__writeable_pdf.add_outline_item(title.decode('utf-8'), page, parent, color, fit)
+        self.__writeable_pdf.add_outline_item(title, page, parent = parent, color = color, bold = bold, italic = italic, fit = None) # TODO： "fit = fit"类型转换错误
         print ('add_one_bookmark success!, new title is:{0}'.format(title))
 
 
@@ -93,30 +96,54 @@ class MyPDFHandler(object):
         :param page_offset: 页码偏移量，为0或正数，即由于封面、目录等页面的存在，在PDF中实际的绝对页码比在目录中写的页码多出的差值
         :return: 书签列表
         '''
-        with open(txt_file_path, 'r') as fin:
-            bookmarks = []
+        
+        print('工作目录：{}'.format(os.getcwd()))
+        current_dir = os.path.dirname(__file__)  # 当前文件所在的目录
+        print('当前文件目录：{}'.format(current_dir))
+        bookmarks = {}
+        with open(os.path.join(current_dir, txt_file_path),encoding='utf-8') as fin:
             for line in fin:
-                line.strip()
-                if not line:
+                if not line or line.isspace():
                     continue
-                print('read line is {0}'.format(line))
-
+                print(line)
                 try:
-                    tag = line.split('@')
-                    title = tag[0].rsplit() # 仅清除字符串末尾的空格，因为若为子标签，字符串的最前边会有tab制表符
-                    page = tag[1].split()
+                    title = line.split('@')[0].strip()
+                    page = line.split('@')[1].strip()
                 except IndexError as msg:
                     print(msg)
                     continue
 
-                # title 和 page都不为空才会添加标签
-                if title and page:
-                    try:
-                        page = int(page) + page_offset
-                        bookmarks.append((title, page))
-                    except ValueError as msg:
-                        print(msg)
-        
+                if not title or not page:
+                    continue
+                page = int(page) + page_offset
+                try:
+                    match = re.search(r"(?<=第).*?(?=章)", title)
+                    if match:
+                        digit = match.group()
+                        digit = digit.strip()
+                        print(digit)
+                        bookmarks[digit] = {"title":title, "page":page, "sub":{}}
+                    else:
+                        serial_num = title.split()[0].strip()
+                        print(serial_num)
+                        serials = serial_num.split('.')
+                        print(serials)
+                        '''
+                        从第二个位置开始遍历，到最终要插入的节点
+                        例如: 0.1.2, 最终找到第三级节点'2'
+                        '''
+                        node = bookmarks[serials[0]]
+                        for serial in serials[1:]:
+                            if serial not in node['sub']:
+                                # 节点不存在则创建
+                                node['sub'][serial] = {}
+                            node = node['sub'][serial]
+                        node['title'] = title
+                        node['page'] = page
+                        node['sub'] = {}
+                except Exception as msg:
+                    print(msg)
+                    continue
         return bookmarks
 
     def add_bookmarks_by_read_txt(self, txt_file_path, page_offset=0):
